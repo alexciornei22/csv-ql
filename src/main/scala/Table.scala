@@ -68,6 +68,7 @@ case class Merge(key: String, t1: Query, t2: Query) extends Query {
 class Table (columnNames: Line, tabular: List[List[String]]) {
   def getColumnNames : Line = columnNames
   def getTabular : List[List[String]] = tabular
+  private val rows : List[Row] = tabular.map(columnNames.zip(_).toMap)
 
   // 1.1
   override def toString: String = {
@@ -85,7 +86,12 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
   }
 
   // 2.1
-  def select(columns: Line): Option[Table] = ???
+  def select(columns: Line): Option[Table] = {
+    val selectedColumns = columnNames.filter(columns.contains(_))
+
+    if (selectedColumns.isEmpty) None
+    else Some(new Table(selectedColumns, rows.map(selectedColumns collect _)))
+  }
 
   // 2.2
   def filter(cond: FilterCond): Option[Table] = ???
