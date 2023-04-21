@@ -1,24 +1,39 @@
 import util.Util.{Line, Row}
 
 trait FilterCond {
-  def &&(other: FilterCond): FilterCond = ???
-  def ||(other: FilterCond): FilterCond = ???
+  def &&(other: FilterCond): FilterCond = And(this, other)
+  def ||(other: FilterCond): FilterCond = Or(this, other)
   // fails if the column name is not present in the row
   def eval(r: Row): Option[Boolean]
 }
 case class Field(colName: String, predicate: String => Boolean) extends FilterCond {
   // 2.2.
-  override def eval(r: Row): Option[Boolean] = ???
+  override def eval(r: Row): Option[Boolean] = {
+    val value = r.get(colName)
+
+    if (value.isEmpty)
+      None
+    else
+      Some(predicate(value.get))
+  }
 }
 
 case class And(f1: FilterCond, f2: FilterCond) extends FilterCond {
   // 2.2.
-  override def eval(r: Row): Option[Boolean] = ???
+  override def eval(r: Row): Option[Boolean] =
+    if (f1.eval(r).isEmpty || f2.eval(r).isEmpty)
+      None
+    else
+      Some(f1.eval(r).get && f2.eval(r).get)
 }
 
 case class Or(f1: FilterCond, f2: FilterCond) extends FilterCond {
   // 2.2.
-  override def eval(r: Row): Option[Boolean] = ???
+  override def eval(r: Row): Option[Boolean] =
+    if (f1.eval(r).isEmpty || f2.eval(r).isEmpty)
+      None
+    else
+      Some(f1.eval(r).get || f2.eval(r).get)
 }
 
 trait Query {
@@ -94,10 +109,25 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
   }
 
   // 2.2
-  def filter(cond: FilterCond): Option[Table] = ???
+  def filter(cond: FilterCond): Option[Table] = {
+    try {
+      val filteredRows = rows.filter(cond.eval(_).get)
+
+      if (filteredRows.isEmpty)
+        None
+      else
+        Some(new Table(columnNames, filteredRows.map(_.values.toList)))
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
 
   // 2.3.
-  def newCol(name: String, defaultVal: String): Table = ???
+  def newCol(name: String, defaultVal: String): Table =
+    new Table(
+      columnNames ++ List(name),
+      tabular.map(_ ++ List(defaultVal))
+    )
 
   // 2.4.
   def merge(key: String, other: Table): Option[Table] = ???
