@@ -1,5 +1,7 @@
 import util.Util.{Line, Row}
 
+import scala.annotation.tailrec
+
 trait FilterCond {
   def &&(other: FilterCond): FilterCond = And(this, other)
   def ||(other: FilterCond): FilterCond = Or(this, other)
@@ -130,7 +132,40 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
     )
 
   // 2.4.
-  def merge(key: String, other: Table): Option[Table] = ???
+  def merge(key: String, other: Table): Option[Table] =
+    if (!columnNames.contains(key) || !other.getColumnNames.contains(key))
+      None
+    else {
+      val mergedColumns = (columnNames ++ other.getColumnNames).distinct
+      val mergedRows = (rows ++ other.rows).groupBy(_(key)).values
+
+      def combineRows(rows: List[Row]): Row =
+        if (rows.length == 1)
+          rows.head
+        else {
+          val map1 = rows.head
+          val map2 = rows(1)
+
+          map2 ++ map1 map {case (k, v) => (k, map2.get(k) match {
+            case Some(str) => if (str.equals(v)) v else v ++ ";" ++ str
+            case _ => v
+          })}
+        }
+
+      @tailrec
+      def addNewCols(row: Row, cols: List[String]): Row =
+        cols match {
+          case Nil => row
+          case col :: rest => addNewCols(row + (col -> ""), rest)
+        }
+
+      val combined = mergedRows.map(combineRows).map(row => {
+        val cols = for (column <- mergedColumns if !row.contains(column)) yield column
+        addNewCols(row, cols)
+      })
+
+      Some(new Table(mergedColumns, combined.map(mergedColumns collect _).toList))
+    }
 }
 
 object Table {
@@ -139,7 +174,7 @@ object Table {
     val lines = s.split("\n").toList
 
     val columns = lines.head.split(",").toList
-    val tabular = lines.drop(1).map(_.split(",").toList)
+    val tabular = lines.drop(1).map(_.split(",", - 1).toList)
 
     new Table(columns, tabular)
   }
