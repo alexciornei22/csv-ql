@@ -47,14 +47,19 @@ trait Query {
   Always succeeds
  */
 case class Value(t: Table) extends Query {
-  override def eval: Option[Table] = ???
+  override def eval: Option[Table] =
+    Some(t)
 }
 /*
   Selects certain columns from the result of a target query
   Fails with None if some rows are not present in the resulting table
  */
 case class Select(columns: Line, target: Query) extends Query {
-  override def eval: Option[Table] = ???
+  override def eval: Option[Table] =
+    if (target.eval.isEmpty)
+      None
+    else
+      target.eval.get.select(columns)
 }
 
 /*
@@ -62,7 +67,11 @@ case class Select(columns: Line, target: Query) extends Query {
   Success depends only on the success of the target
  */
 case class Filter(condition: FilterCond, target: Query) extends Query {
-  override def eval: Option[Table] = ???
+  override def eval: Option[Table] =
+    if (target.eval.isEmpty)
+      None
+    else
+      target.eval.get.filter(condition)
 }
 
 /*
@@ -70,7 +79,11 @@ case class Filter(condition: FilterCond, target: Query) extends Query {
   Success depends only on the success of the target
  */
 case class NewCol(name: String, defaultVal: String, target: Query) extends Query {
-  override def eval: Option[Table] = ???
+  override def eval: Option[Table] =
+    if (target.eval.isEmpty)
+      None
+    else
+      Some(target.eval.get.newCol(name, defaultVal))
 }
 
 /*
@@ -78,7 +91,12 @@ case class NewCol(name: String, defaultVal: String, target: Query) extends Query
   Success depends on whether the key exists in both tables or not AND on the success of the target
  */
 case class Merge(key: String, t1: Query, t2: Query) extends Query {
-  override def eval: Option[Table] = ???
+  override def eval: Option[Table] =
+    if (t1.eval.isEmpty || t2.eval.isEmpty)
+      None
+    else
+      t1.eval.get.merge(key, t2.eval.get)
+
 }
 
 
@@ -107,7 +125,7 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
     val selectedColumns = columnNames.filter(columns.contains(_))
 
     if (selectedColumns.isEmpty) None
-    else Some(new Table(selectedColumns, rows.map(selectedColumns collect _)))
+    else Some(new Table(columns, rows.map(columns collect _)))
   }
 
   // 2.2
@@ -118,7 +136,7 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
       if (filteredRows.isEmpty)
         None
       else
-        Some(new Table(columnNames, filteredRows.map(_.values.toList)))
+        Some(new Table(columnNames, filteredRows.map(columnNames collect _)))
     } catch {
       case _: NoSuchElementException => None
     }
@@ -160,8 +178,8 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
         }
 
       val combined = mergedRows.map(combineRows).map(row => {
-        val cols = for (column <- mergedColumns if !row.contains(column)) yield column
-        addNewCols(row, cols)
+        val newCols = for (column <- mergedColumns if !row.contains(column)) yield column
+        addNewCols(row, newCols)
       })
 
       Some(new Table(mergedColumns, combined.map(mergedColumns collect _).toList))
@@ -174,9 +192,10 @@ object Table {
     val lines = s.split("\n").toList
 
     val columns = lines.head.split(",").toList
-    val tabular = lines.drop(1).map(_.split(",", - 1).toList)
+    val tabular =
+      lines.drop(1)
+      .map(_.split(",", -1).toList)
 
     new Table(columns, tabular)
   }
-
 }
