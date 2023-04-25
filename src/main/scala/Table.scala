@@ -157,30 +157,40 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
       val mergedColumns = (columnNames ++ other.getColumnNames).distinct
       val mergedRows = (rows ++ other.rows).groupBy(_(key)).values
 
-      def combineRows(rows: List[Row]): Row =
-        if (rows.length == 1)
-          rows.head
-        else {
-          val map1 = rows.head
-          val map2 = rows(1)
+      def listToRow(rows: List[Row]): Row = {
+        def mergeRows(rowA: Row, rowB: Row): Row = {
+          def addToRow(row: Row, kv: (String, String)): Row = {
+            kv match {
+              case (key, value) =>
+                if (!row.contains(key))
+                  row + kv
+                else if (row(key).contains(value))
+                  row
+                else
+                  row + (key -> (row(key) + ";" + value))
+            }
+          }
 
-          map2 ++ map1 map {case (k, v) => (k, map2.get(k) match {
-            case Some(str) => if (str.equals(v)) v else v ++ ";" ++ str
-            case _ => v
-          })}
+          rowB.foldLeft(rowA)(addToRow)
         }
 
-      @tailrec
-      def addNewCols(row: Row, cols: List[String]): Row =
-        cols match {
-          case Nil => row
-          case col :: rest => addNewCols(row + (col -> ""), rest)
-        }
+        rows.foldLeft(Map.empty[String, String])(mergeRows)
+      }
 
-      val combined = mergedRows.map(combineRows).map(row => {
-        val newCols = for (column <- mergedColumns if !row.contains(column)) yield column
-        addNewCols(row, newCols)
-      })
+      def addNewCols(row: Row): Row = {
+        val newCols = mergedColumns.filterNot(row.contains)
+
+        @tailrec
+        def aux(newRow: Row, cols: Line): Row =
+          cols match {
+            case Nil => newRow
+            case col :: rest => aux(newRow + (col -> ""), rest)
+          }
+
+        aux(row, newCols)
+      }
+
+      val combined = mergedRows.map(listToRow).map(addNewCols)
 
       Some(new Table(mergedColumns, combined.map(mergedColumns collect _).toList))
     }
@@ -192,8 +202,7 @@ object Table {
     val lines = s.split("\n").toList
 
     val columns = lines.head.split(",").toList
-    val tabular =
-      lines.drop(1)
+    val tabular = lines.drop(1)
       .map(_.split(",", -1).toList)
 
     new Table(columns, tabular)

@@ -128,10 +128,8 @@ object TestTables {
   // 3.2
   val programmingLanguages2: Table =
     Filter(
-      And(
-        Field("Other paradigms", _.contains("concurrent")),
+        Field("Other paradigms", _.contains("concurrent")) &&
         Field("Original purpose", _.contains("Application")),
-      ),
       Value(programmingLanguages1)
     ).eval.get
 
