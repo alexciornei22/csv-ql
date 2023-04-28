@@ -117,14 +117,18 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
     columnNames.foldLeft("")(op) + "\n" +
       tabular.map(_.foldLeft("")(op))
         .foldLeft("")(_ + _ + "\n")
-        .dropRight(1)
+        .dropRight(1) // drop extra \n character
   }
 
   // 2.1
   def select(columns: Line): Option[Table] = {
     val selectedColumns = columnNames.filter(columns.contains(_))
 
-    if (selectedColumns.isEmpty) None
+    /*
+     * Return a Table if we found all of the searched columns,
+     * fail otherwise
+     */
+    if (!(selectedColumns.toSet equals columns.toSet)) None
     else Some(new Table(columns, rows.map(columns collect _)))
   }
 
@@ -155,19 +159,31 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
       None
     else {
       val mergedColumns = (columnNames ++ other.getColumnNames).distinct
-      val mergedRows = (rows ++ other.rows).groupBy(_(key)).values
+      val groupedRows = (rows ++ other.rows).groupBy(_(key)).values
 
+      /**
+       * Merge a list of rows into a single row
+       */
       def listToRow(rows: List[Row]): Row = {
+        /**
+         * Merge 2 rows together
+         */
         def mergeRows(rowA: Row, rowB: Row): Row = {
+          /**
+           * Add a (key, value) pair to a row map,
+           * according to the specified rules
+           */
           def addToRow(row: Row, kv: (String, String)): Row = {
             kv match {
               case (key, value) =>
                 if (!row.contains(key))
-                  row + kv
+                  row + kv // key isn't in map
                 else if (row(key).contains(value))
-                  row
-                else
+                  row // key with the same value already in map
+                else {
+                  // key with different value, must append with ';'
                   row + (key -> (row(key) + ";" + value))
+                }
             }
           }
 
@@ -177,6 +193,10 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
         rows.foldLeft(Map.empty[String, String])(mergeRows)
       }
 
+      /**
+       * add new empty columns to row if no value is found
+       * after merging
+       */
       def addNewCols(row: Row): Row = {
         val newCols = mergedColumns.filterNot(row.contains)
 
@@ -190,9 +210,9 @@ class Table (columnNames: Line, tabular: List[List[String]]) {
         aux(row, newCols)
       }
 
-      val combined = mergedRows.map(listToRow).map(addNewCols)
+      val mergedRows = groupedRows.map(listToRow).map(addNewCols)
 
-      Some(new Table(mergedColumns, combined.map(mergedColumns collect _).toList))
+      Some(new Table(mergedColumns, mergedRows.map(mergedColumns collect _).toList))
     }
 }
 
@@ -203,6 +223,8 @@ object Table {
 
     val columns = lines.head.split(",").toList
     val tabular = lines.drop(1)
+      // limit set to -1 in order to include empty value
+      // at end of line after ',' if it exists
       .map(_.split(",", -1).toList)
 
     new Table(columns, tabular)
